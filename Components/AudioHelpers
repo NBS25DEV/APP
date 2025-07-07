@@ -1,0 +1,84 @@
+import { getPathLength, getPointAtLength } from 'svg-path-properties';
+
+export const playSoundEffect = (effectType) => {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+
+    switch (effectType) {
+      case 'train':
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.5);
+        break;
+      case 'lion':
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(100, audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.8);
+        break;
+      case 'marker':
+        oscillator.type = 'square';
+        oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.2);
+        break;
+      default:
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(440, audioContext.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
+    }
+    
+    oscillator.start();
+    setTimeout(() => audioContext.close(), 1000);
+  } catch (e) {
+    console.error("Could not play sound effect", e);
+  }
+};
+
+let bestVoice = null;
+export const getBestHebrewVoice = () => {
+    if (bestVoice) return bestVoice;
+    if ('speechSynthesis' in window) {
+        const voices = speechSynthesis.getVoices();
+        bestVoice = voices.find(v => v.lang === 'he-IL' && v.name.includes('Google'));
+        if (!bestVoice) {
+            bestVoice = voices.find(v => v.lang === 'he-IL');
+        }
+    }
+    return bestVoice;
+};
+
+// Levenshtein distance for string similarity
+export const levenshteinDistance = (a, b) => {
+  if (a.length === 0) return b.length; 
+  if (b.length === 0) return a.length;
+  const matrix = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
+  for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+  for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+    }
+  }
+  return matrix[a.length][b.length];
+};
+
+export const createCheckpoints = (svgPath, numCheckpoints = 20) => {
+    if (!svgPath) return [];
+    try {
+        const totalLength = getPathLength(svgPath);
+        const checkpoints = [];
+        for (let i = 0; i <= numCheckpoints; i++) {
+            const point = getPointAtLength(svgPath, (i / numCheckpoints) * totalLength);
+            checkpoints.push({ x: point.x, y: point.y, hit: false });
+        }
+        return checkpoints;
+    } catch(e) {
+        console.error("Invalid SVG path:", svgPath);
+        return [];
+    }
+};
