@@ -1,0 +1,114 @@
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Letter } from '@/entities/Letter';
+import { Button } from '@/components/ui/button';
+import { ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import WritingPractice from '../components/WritingPractice';
+import ParentsDashboard from '../components/ParentsDashboard';
+import AudioController from '../components/AudioController';
+
+export default function WritingGrid() {
+  const navigate = useNavigate();
+  const [letters, setLetters] = useState([]);
+  const [selectedLetter, setSelectedLetter] = useState(null);
+  const [showParentsDashboard, setShowParentsDashboard] = useState(false);
+
+  useEffect(() => {
+    loadLetters();
+  }, []);
+
+  const loadLetters = async () => {
+    const data = await Letter.list();
+    setLetters(data);
+  };
+
+  if (selectedLetter) {
+    return (
+      <WritingPractice
+        letter={selectedLetter}
+        onBack={() => setSelectedLetter(null)}
+        onComplete={() => setSelectedLetter(null)}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 py-8 px-4">
+      <AudioController />
+      
+      <div className="max-w-6xl mx-auto" dir="rtl">
+        {/* כותרת */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-800 mb-4">
+            🖍️ בואו נכתוב אותיות!
+          </h1>
+          <p className="text-xl text-gray-600">
+            בחרו אות כדי להתחיל לכתוב
+          </p>
+        </div>
+
+        {/* רשת האותיות */}
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+          {letters.map((letter, index) => (
+            <motion.div
+              key={letter.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="bg-white rounded-2xl shadow-lg p-4 cursor-pointer border-2 border-gray-100 hover:border-purple-300 transition-all"
+              onClick={() => setSelectedLetter(letter)}
+            >
+              {/* אייקון קטן */}
+              <div className="text-right text-lg mb-2">{letter.icon}</div>
+              
+              {/* האות המקווקעת */}
+              <div className="text-center">
+                <div 
+                  className="text-4xl font-bold text-gray-400 mb-2"
+                  style={{ 
+                    fontFamily: 'Varela Round, sans-serif',
+                    textShadow: '2px 2px 4px rgba(0,0,0,0.1)',
+                    WebkitTextStroke: '1px #CBD5E1',
+                    WebkitTextFillColor: 'transparent'
+                  }}
+                >
+                  {letter.letter}
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* כפתורים תחתונים */}
+        <div className="flex justify-center gap-4 mb-8">
+          <Button
+            onClick={() => setShowParentsDashboard(true)}
+            variant="outline"
+            className="bg-white hover:bg-gray-50 px-6 py-3 rounded-2xl"
+          >
+            📊 קטגוריה להורים
+          </Button>
+          
+          <Button
+            onClick={() => navigate(createPageUrl('Home'))}
+            className="bg-purple-500 hover:bg-purple-600 text-white px-8 py-4 rounded-2xl text-xl flex items-center gap-2"
+          >
+            <ArrowRight className="w-6 h-6" />
+            חזור
+          </Button>
+        </div>
+      </div>
+
+      {showParentsDashboard && (
+        <ParentsDashboard
+          type="writing"
+          onClose={() => setShowParentsDashboard(false)}
+        />
+      )}
+    </div>
+  );
+}
