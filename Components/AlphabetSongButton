@@ -1,0 +1,36 @@
+import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Play, Pause } from 'lucide-react';
+import { useAudio } from '../Layout';
+
+export default function AlphabetSongButton({ className }) {
+  const { songRef, musicRef, managePlayback } = useAudio();
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    const audio = songRef.current;
+    if (audio) {
+      const handlePlay = () => setIsPlaying(true);
+      const handlePause = () => setIsPlaying(false);
+      audio.addEventListener('play', handlePlay);
+      audio.addEventListener('pause', handlePause);
+      return () => {
+        audio.removeEventListener('play', handlePlay);
+        audio.removeEventListener('pause', handlePause);
+      };
+    }
+  }, [songRef]);
+
+  const togglePlay = () => {
+    if (songRef.current) {
+        managePlayback(songRef, musicRef);
+    }
+  };
+
+  return (
+    <div className={`relative ${className}`}>
+      <audio ref={songRef} src="/uploads/the-hebrew-alphabet-song.mp3" loop />
+      {/* ... The rest of the component JSX, using togglePlay ... */}
+    </div>
+  );
+}
