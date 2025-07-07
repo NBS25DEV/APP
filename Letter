@@ -1,0 +1,32 @@
+{
+  "name": "Letter",
+  "type": "object",
+  "properties": {
+    "letter": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "word": {
+      "type": "string"
+    },
+    "icon": {
+      "type": "string"
+    },
+    "sound_effect": {
+      "type": "string",
+      "description": "סוג אפקט הקול (לדוגמה: 'train', 'lion')"
+    },
+    "writing_path": {
+      "type": "string",
+      "description": "נתוני SVG path לציור האות המקווקעת"
+    }
+  },
+  "required": [
+    "letter",
+    "name",
+    "word",
+    "icon"
+  ]
+}
