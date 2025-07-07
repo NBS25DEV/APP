@@ -1,0 +1,231 @@
+
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Letter } from '@/entities/Letter';
+import LetterCard from '../components/LetterCard';
+import Header from '../components/Header';
+import MicrophoneTest from '../components/MicrophoneTest';
+import ParentsDashboard from '../components/ParentsDashboard';
+import AudioController from '../components/AudioController';
+import AlphabetSongButton from '../components/AlphabetSongButton';
+import { Button } from '@/components/ui/button';
+import { Edit3 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { useAudio } from '../Layout'; // Updated import path as per outline
+import { playSoundEffect, getBestHebrewVoice } from '../components/AudioHelpers'; // Updated import path as per outline
+
+export default function Home() {
+  const navigate = useNavigate();
+  const [lettersData, setLettersData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedLetterForMic, setSelectedLetterForMic] = useState(null);
+  const [showParentsDashboard, setShowParentsDashboard] = useState(false);
+  
+  // Renamed the destructured function as per outline
+  const { playLetterSound: playWithMusicHandling } = useAudio();
+  const hasPlayedIntro = useRef(false);
+  
+  useEffect(() => {
+    loadLetters();
+    if ('speechSynthesis' in window) {
+        speechSynthesis.getVoices(); // Pre-load voices
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading && !hasPlayedIntro.current) {
+      setTimeout(() => {
+          if ('speechSynthesis' in window) {
+              speechSynthesis.cancel();
+              const utterance = new SpeechSynthesisUtterance("לחצו על אות כדי לשמוע!");
+              utterance.lang = 'he-IL';
+              utterance.voice = getBestHebrewVoice();
+              speechSynthesis.speak(utterance);
+          }
+      }, 1000);
+      hasPlayedIntro.current = true;
+    }
+  }, [isLoading]);
+
+  const loadLetters = async () => {
+    try {
+      const data = await Letter.list();
+      // Initialize local state for proficiency etc.
+      setLettersData(data.map(l => ({ ...l, proficiency: 0, hasTriedWriting: false })));
+    } catch (error) {
+      console.error('Error loading letters:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const playSoundForLetter = (letter, onEnd = () => {}) => {
+    // This internal function encapsulates the actual speech synthesis and sound effect logic.
+    // It returns a Promise that resolves when the entire audio sequence is complete.
+    const audioSequence = () => {
+      return new Promise(resolve => {
+        if ('speechSynthesis' in window) {
+          speechSynthesis.cancel();
+          const voice = getBestHebrewVoice();
+          
+          const utteranceName = new SpeechSynthesisUtterance(letter.name);
+          utteranceName.lang = 'he-IL';
+          utteranceName.voice = voice;
+          utteranceName.rate = 0.9;
+          utteranceName.pitch = 1.2;
+
+          const utteranceWord = new SpeechSynthesisUtterance(letter.word);
+          utteranceWord.lang = 'he-IL';
+          utteranceWord.voice = voice;
+          utteranceWord.rate = 0.9;
+          utteranceWord.pitch = 1.1;
+
+          // Chain the utterances: name then word
+          utteranceName.onend = () => speechSynthesis.speak(utteranceWord);
+          utteranceWord.onend = () => {
+            // Play sound effect after the word utterance
+            playSoundEffect(letter.sound_effect);
+            // Resolve the promise after a short delay to allow sound effect to play
+            setTimeout(() => {
+                resolve(); 
+            }, 500); 
+          };
+
+          // Start the speech synthesis sequence
+          speechSynthesis.speak(utteranceName);
+        } else {
+          // If speech synthesis is not supported, resolve immediately
+          resolve();
+        }
+      });
+    };
+
+    // `playWithMusicHandling` from the AudioContext will manage pausing and resuming
+    // background music around the execution of our `audioSequence`.
+    // The `.then()` ensures that the external `onEnd` callback (passed to `playSoundForLetter`)
+    // is called only after the entire letter sound sequence is finished and background music
+    // (if any) has potentially resumed.
+    playWithMusicHandling(audioSequence).then(() => {
+        onEnd(); 
+    });
+  };
+
+  const handleMicResult = (letterId, score) => {
+    setLettersData(prev => prev.map(l => 
+      l.id === letterId ? { ...l, proficiency: Math.max(l.proficiency, score) } : l
+    ));
+    setSelectedLetterForMic(null);
+  };
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center">
+          <motion.div className="text-6xl mb-4" animate={{ scale: [1, 1.2, 1], rotate: [0, 180, 360] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}>
+            🌈
+          </motion.div>
+          <p className="text-2xl text-gray-600 font-semibold">הכנה...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <AudioController />
+      
+      <div className="py-8 px-4 md:px-8" dir="rtl">
+        <div className="max-w-6xl mx-auto">
+          <Header />
+          
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-4 mb-8">
+            <AlphabetSongButton />
+            <div className="relative">
+              <Button
+                onClick={() => navigate(createPageUrl('WritingGrid'))}
+                className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-6 py-3 rounded-2xl flex items-center gap-2 shadow-lg"
+              >
+                <Edit3 className="w-5 h-5" />
+                <span className="text-lg font-bold">למדו לכתוב</span>
+              </Button>
+              <div className="absolute -top-2 -left-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold animate-pulse">
+                חדש!
+              </div>
+            </div>
+             <Button
+                onClick={() => setShowParentsDashboard(true)}
+                variant="outline"
+                className="bg-white/80 hover:bg-white px-4 py-2 rounded-2xl text-sm"
+              >
+                📊 להורים
+              </Button>
+          </div>
+          
+          <AnimatePresence>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6 relative">
+              {lettersData.map((letter, index) => (
+                <div key={letter.id} className="relative group">
+                  <LetterCard
+                    letter={letter}
+                    index={index}
+                    onPlay={playSoundForLetter}
+                  />
+                  <motion.button
+                    className="absolute -top-3 -left-3 bg-red-500 text-white p-3 rounded-full shadow-lg z-20 text-xl"
+                    whileHover={{ scale: 1.1, rotate: 10 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedLetterForMic(letter);
+                    }}
+                  >
+                    🎤
+                  </motion.button>
+                </div>
+              ))}
+            </div>
+          </AnimatePresence>
+          
+          {lettersData.length === 0 && !isLoading && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-16"
+            >
+              <div className="text-8xl mb-6">🎨</div>
+              <h3 className="text-3xl font-bold text-gray-600 mb-4">בקרוב...</h3>
+              <p className="text-xl text-gray-500">האותיות בדרך אליכם!</p>
+            </motion.div>
+          )}
+          
+          <motion.div
+            className="fixed bottom-6 left-6 text-4xl z-20"
+            animate={{ y: [0, -10, 0] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          >
+            👧
+          </motion.div>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {selectedLetterForMic && (
+          <MicrophoneTest
+            letter={selectedLetterForMic}
+            onClose={() => setSelectedLetterForMic(null)}
+            onResult={handleMicResult}
+          />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {showParentsDashboard && (
+          <ParentsDashboard
+            type="pronunciation"
+            onClose={() => setShowParentsDashboard(false)}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
