@@ -1,0 +1,206 @@
+
+import React, { useState, useRef, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, RefreshCw } from 'lucide-react';
+
+import { getPathLength, getPointAtLength } from 'svg-path-properties';
+
+export default function WritingPractice({ letter, onBack, onResult }) { // Changed onComplete to onResult
+  const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [coverage, setCoverage] = useState(0); // New state for coverage
+  const [checkpoints, setCheckpoints] = useState([]); // New state for checkpoints
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.strokeStyle = '#3B82F6';
+      ctx.lineWidth = 12; // עבה יותר למגע נוח
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+    }
+
+    // Initialize checkpoints based on letter.writing_path
+    if (letter.writing_path) {
+        const totalLength = getPathLength(letter.writing_path);
+        const numCheckpoints = 20; // Number of checkpoints along the path
+        const newCheckpoints = [];
+        for (let i = 0; i < numCheckpoints; i++) { // Loop < numCheckpoints to avoid double counting start/end if totalLength=0
+            const point = getPointAtLength(letter.writing_path, (i / numCheckpoints) * totalLength);
+            newCheckpoints.push({ x: point.x, y: point.y, hit: false });
+        }
+        setCheckpoints(newCheckpoints);
+    } else {
+      setCheckpoints([]); // Clear checkpoints if no path
+    }
+    
+    // Ensure canvas is cleared and dotted letter path is displayed
+    // This will also reset coverage and checkpoint hit status
+    clearCanvas(); 
+  }, [letter]); // Dependency on letter to re-initialize checkpoints and clear canvas
+
+  const getCanvasPos = (e) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches ? e.touches[0] : e;
+    return {
+        x: touch.clientX - rect.left,
+        y: touch.clientY - rect.top
+    };
+  }
+
+  const startDrawing = (e) => {
+    setIsDrawing(true);
+    const pos = getCanvasPos(e);
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+  };
+
+  const draw = (e) => {
+    if (!isDrawing) return;
+    const pos = getCanvasPos(e);
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+
+    // Check if drawing hits any checkpoints
+    const updatedCheckpoints = checkpoints.map(p => {
+        if (!p.hit) {
+            const distance = Math.sqrt(Math.pow(p.x - pos.x, 2) + Math.pow(p.y - pos.y, 2));
+            if (distance < 15) { // 15px radius for checkpoint
+                return { ...p, hit: true };
+            }
+        }
+        return p;
+    });
+    setCheckpoints(updatedCheckpoints);
+    const hitCount = updatedCheckpoints.filter(p => p.hit).length;
+    setCoverage(checkpoints.length > 0 ? hitCount / checkpoints.length : 0);
+  };
+
+  const stopDrawing = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.closePath();
+    
+    let score = 0;
+    // Score logic based on coverage
+    if (coverage > 0.8) score = 3; // Excellent
+    else if (coverage > 0.5) score = 2; // Good
+    else if (coverage > 0.2) score = 1; // Needs practice
+    else score = 0; // Very low coverage
+
+    // Call the onResult prop with the calculated score
+    onResult(score);
+
+    // Speech synthesis logic
+    if ('speechSynthesis' in window) {
+      let utteranceText = '';
+      if (score === 3) {
+        utteranceText = 'כל הכבוד! כתבת יפה מאוד!';
+      } else if (score === 2) {
+        utteranceText = 'כמעט מושלם! נסה שוב להשתפר.';
+      } else if (score === 1) {
+        utteranceText = 'אתה בדרך הנכונה! תמשיך לנסות.';
+      } else { // score === 0
+        utteranceText = 'אל תתייאש! בוא ננסה שוב.';
+      }
+      const utterance = new SpeechSynthesisUtterance(utteranceText);
+      utterance.lang = 'he-IL';
+      utterance.rate = 0.8;
+      speechSynthesis.speak(utterance);
+    }
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setCoverage(0); // Reset coverage
+    // Reset hit status of all checkpoints
+    setCheckpoints(prevCheckpoints => prevCheckpoints.map(p => ({ ...p, hit: false })));
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-4">
+      <div className="max-w-2xl mx-auto">
+        {/* כותרת */}
+        <div className="text-center mb-8">
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <div className="text-3xl">{letter.icon}</div>
+            <h1 className="text-3xl font-bold text-gray-800">
+              בואו נכתוב: {letter.name}
+            </h1>
+          </div>
+          <p className="text-lg text-gray-600">
+            עקבו אחרי הקווים המקווקעים באצבע
+          </p>
+        </div>
+
+        {/* אזור כתיבה */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white rounded-3xl shadow-2xl p-4 sm:p-8 mb-8 relative"
+        >
+          {/* Render the SVG path as a background for the letter */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            {letter.writing_path && (
+              <svg className="w-full h-full absolute inset-0" viewBox="0 0 300 300">
+                <path
+                  d={letter.writing_path}
+                  fill="none"
+                  stroke="#D1D5DB" // Light gray for dotted appearance
+                  strokeWidth="12" // Same width as drawing
+                  strokeDasharray="10 10" // Dotted line
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </div>
+          <canvas
+            ref={canvasRef}
+            width={300}
+            height={300}
+            className="mx-auto block cursor-pointer touch-none relative z-10"
+            onMouseDown={startDrawing}
+            onMouseMove={draw}
+            onMouseUp={stopDrawing}
+            onMouseLeave={stopDrawing}
+            onTouchStart={(e) => { e.preventDefault(); startDrawing(e); }}
+            onTouchMove={(e) => { e.preventDefault(); draw(e); }}
+            onTouchEnd={(e) => { e.preventDefault(); stopDrawing(); }}
+          />
+        </motion.div>
+
+        {/* כפתורים */}
+        <div className="flex justify-center gap-4 mb-8">
+          <Button
+            onClick={clearCanvas}
+            variant="outline"
+            className="bg-white hover:bg-gray-50 px-6 py-3 rounded-2xl flex items-center gap-2"
+          >
+            <RefreshCw className="w-5 h-5" />
+            נקה ונסה שוב
+          </Button>
+        </div>
+
+        {/* כפתור חזור */}
+        <div className="text-center">
+          <Button
+            onClick={onBack}
+            className="bg-purple-500 hover:bg-purple-600 text-white px-8 py-4 rounded-2xl text-xl flex items-center gap-2 mx-auto"
+          >
+            <ArrowRight className="w-6 h-6" />
+            חזור
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
